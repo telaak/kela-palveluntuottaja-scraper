@@ -32,7 +32,7 @@ model Phone {
   number      String     @unique
   lastActive  DateTime?
   isActive    Boolean    @default(false)
-  Therapist   Therapist? @relation(fields: [therapistId], references: [id])
+  Therapist   Therapist? @relation(fields: [therapistId], references: [id], onDelete: Cascade)
   therapistId Int?
 }
 
