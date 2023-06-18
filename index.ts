@@ -328,7 +328,7 @@ enum Lakiperuste {
   AMMATILLINEN = "2",
 }
 
-enum Toimenpide {
+enum Kuntoutusmuoto {
   AIKUISTEN = "Aikuisten psykoterapia",
   KUVATAIDE = "Kuvataidepsykoterapia",
   MUSIIKKI = "Nuorten musiikkiterapia",
@@ -349,12 +349,60 @@ enum Kieli {
   VIITTOMAKIELI = "viittomakieli",
 }
 
+enum Laji {
+  YKSILÖ = "yksilöterapia",
+  RYHMÄ = "ryhmäterapia",
+  PERHE = "perheterapia",
+  PARI = "paripsykoterapia",
+}
+
+enum Suuntaus {
+  KAIKKI = "kaikki",
+  PSYKOANALYYTTINEN = "psykoanalyyttinen",
+  GESTALT = "gestalt-terapia",
+  INTEGROIVA = "integroiva",
+  KOGNITIIVIS_ANALYYTTINEN = "kognitiivis-analyyttinen",
+  KOGNITIIVINEN = "kognitiivinen",
+  KRIISI_TRAUMA = "kriisi- ja traumaterapia",
+  MUSIIKKI = "musiikkiterapia",
+  NEPSY = "neuropsykiatriset häiriöt",
+  PARI = "paripsykoterapia",
+  PERHE = "perheterapia",
+  PSYKODYNAAMINEN = "psykodynaaminen",
+  RATKAISUKESKEINEN = "ratkaisukeskeinen",
+}
+
+type TherapistSnippet = {
+  name: string;
+  location: string;
+  phoneNumbers: string[];
+  links: string[];
+};
+
+type Kuntoutus = {
+  muoto: Kuntoutusmuoto;
+  lajit: Laji[];
+};
+
+type Therapist = {
+  name: string;
+  locations: string[];
+  phoneNumbers: string[];
+  email: string | null;
+  homepage?: string;
+  languages: string[];
+  orientations: Suuntaus[];
+  therapyTypes: Kuntoutus[];
+};
+
 class KelaParser {
   public currentViewState!: string;
   private jar = new CookieJar();
   private client = wrapper(
     axios.create({ jar: this.jar, withCredentials: true })
   );
+
+  public phoneNumberSet: Set<string> = new Set();
 
   getViewStateFromHTML(html: string) {
     const { document } = new JSDOM(html).window;
@@ -386,7 +434,7 @@ class KelaParser {
   async initTherapists(
     lakiperuste: Lakiperuste,
     kunta: Kunta,
-    toimenpide: Toimenpide,
+    Kuntoutusmuoto: Kuntoutusmuoto,
     kieli: Kieli
   ) {
     const response = await this.client.post(
@@ -395,7 +443,7 @@ class KelaParser {
         "form1:radioLakiperuste": lakiperuste,
         "form1:inputTextNimihaku": "",
         "form1:selectOneMenuKunta": kunta,
-        "form1:selectOneMenuToimenpide": toimenpide,
+        "form1:selectOneMenuKuntoutusmuoto": Kuntoutusmuoto,
         "form1:button2": "Submit",
         "form1:selectOneMenuKommunikaatio": kieli,
         form1_SUBMIT: "1",
@@ -408,7 +456,7 @@ class KelaParser {
   async getTherapists(
     lakiperuste: Lakiperuste,
     kunta: Kunta,
-    toimenpide: Toimenpide,
+    Kuntoutusmuoto: Kuntoutusmuoto,
     kieli: Kieli
   ) {
     const response = await this.client.post(
@@ -417,7 +465,7 @@ class KelaParser {
         "form1:radioLakiperuste": lakiperuste,
         "form1:inputTextNimihaku": "",
         "form1:selectOneMenuKunta": kunta,
-        "form1:selectOneMenuToimenpide": toimenpide,
+        "form1:selectOneMenuKuntoutusmuoto": Kuntoutusmuoto,
         "form1:selectoneMenuTarkentava1": "",
         "form1:selectoneMenuTarkentava2": "Kaikki",
         "form1:selectOneMenuKommunikaatio": kieli,
@@ -442,20 +490,35 @@ class KelaParser {
     return response.data;
   }
 
+  async getTherapistInfo(tableIndex: number) {
+    const response = await this.client.post(
+      allUrl,
+      querystring.stringify({
+        hakutulos_form1_SUBMIT: "1",
+        "javax.faces.ViewState": this.currentViewState,
+        "hakutulos_form1:_idcl": `hakutulos_form1:tableExPalveluntuottajat:${tableIndex}:palveluntuottajaCommandLink`,
+      })
+    );
+    // this.getViewStateFromHTML(response.data);
+    return response.data;
+  }
+
+  async navigateBack() {}
+
   async getTherapistsWithParams(
     lakiperuste: Lakiperuste,
     kunta: Kunta,
-    toimenpide: Toimenpide,
+    Kuntoutusmuoto: Kuntoutusmuoto,
     kieli: Kieli
-  ) {
+  ): Promise<string> {
     await this.jar.removeAllCookies();
     await this.getInitialViewState();
     await this.setLakiperuste(lakiperuste);
-    await this.initTherapists(lakiperuste, kunta, toimenpide, kieli);
+    await this.initTherapists(lakiperuste, kunta, Kuntoutusmuoto, kieli);
     await this.getTherapists(
       Lakiperuste.KUNTOUTUSPSYKOTERAPIA,
       kunta,
-      toimenpide,
+      Kuntoutusmuoto,
       kieli
     );
     const therapists = await this.getAllTherapists();
@@ -472,13 +535,123 @@ class KelaParser {
     return therapistObjects;
   }
 
-  parseRow(row: HTMLTableRowElement) {
+  parseLocations(document: Document) {
+    const locationTitleNode = document.getElementById(
+      "form1:SijaintiText"
+    ) as HTMLElement;
+    const locationCells =
+      locationTitleNode.parentElement!.nextElementSibling!.querySelectorAll(
+        "span"
+      );
+    const primaryLocation = locationCells[0]?.textContent;
+    const secondaryLocations = locationCells[1]
+      ? (locationCells[1].textContent
+          ?.replace(/[^A-ZÄÖÅ,]/g, "")
+          .split(",") as string[])
+      : [];
+
+    const locations = [primaryLocation, ...secondaryLocations] as string[];
+    return locations;
+  }
+
+  parseName(document: Document) {
+    const nameTitleNode = document.getElementById(
+      "form1:NimiText"
+    ) as HTMLElement;
+    const name =
+      nameTitleNode.parentElement?.nextElementSibling?.textContent?.trim() as string;
+    return name;
+  }
+
+  parsePhoneNumbers(document: Document) {
+    const phoneNumberTitleNode = document.getElementById(
+      "form1:PuhelinText"
+    ) as HTMLElement;
+    const phoneNumberString =
+      phoneNumberTitleNode.parentElement?.nextElementSibling?.textContent?.trim() as string;
+    const phoneNumbers = phoneNumberString
+      .split(",")
+      .map((n) => n.replace(/[^0-9+]/g, ""));
+    return phoneNumbers;
+  }
+
+  parseEmailAddress(document: Document) {
+    const emailTitleNode = document.getElementById("form1:MailText");
+    if (emailTitleNode) {
+      const emailAddress =
+        emailTitleNode.parentElement?.nextElementSibling?.textContent?.trim() as string;
+      return emailAddress;
+    }
+    return null;
+  }
+
+  parseLanguages(document: Document) {
+    const languageTitleNode = document.getElementById(
+      "form1:KieliText"
+    ) as HTMLElement;
+    const languageString = languageTitleNode.parentElement?.nextElementSibling
+      ?.textContent as string;
+    const languages = languageString.split(",").map((n) => n.trim());
+    return languages;
+  }
+
+  parseOrientations(document: Document) {
+    const orientationTable = document.getElementById(
+      "form1:terapiansuuntauksetPanelGrid"
+    );
+    const orientationNodes = orientationTable?.querySelectorAll(
+      ".palveluntuottajanTiedotOikeaSarake"
+    ) as NodeListOf<HTMLTableCellElement>;
+    const orientations = Array.from(orientationNodes).map((n) =>
+      n.textContent?.trim()
+    ) as Suuntaus[];
+    return orientations;
+  }
+
+  parseTherapyTypes(document: Document): Kuntoutus[] {
+    const rootTable = document.getElementById(
+      "form1:j_id_jsp_1117862750_45"
+    ) as HTMLTableElement;
+    const rootCells = rootTable.querySelectorAll(
+      ".palveluntuottajanTiedotOikeaSarake"
+    ) as NodeListOf<HTMLTableCellElement>;
+    const kuntoutukset = Array.from(rootCells).map((n) => {
+      const muoto = n.querySelector("a")?.textContent as Kuntoutusmuoto;
+      const lajiTable = n.querySelector("table") as HTMLTableElement;
+      const lajiNodes = lajiTable.querySelectorAll(
+        ".palveluntuottajanTiedotDatatableTarkenneOikeaSarake"
+      ) as NodeListOf<HTMLTableCellElement>;
+      const lajit = Array.from(lajiNodes).map((n) =>
+        n.textContent?.trim()
+      ) as Laji[];
+      return {
+        muoto,
+        lajit,
+      };
+    });
+    return kuntoutukset;
+  }
+
+  parseTherapist(html: string): Therapist {
+    const { document } = new JSDOM(html).window;
+    return {
+      name: this.parseName(document),
+      locations: this.parseLocations(document),
+      phoneNumbers: this.parsePhoneNumbers(document),
+      email: this.parseEmailAddress(document),
+      languages: this.parseLanguages(document),
+      orientations: this.parseOrientations(document),
+      therapyTypes: this.parseTherapyTypes(document),
+    };
+  }
+
+  parseRow(row: HTMLTableRowElement): TherapistSnippet {
     const cells = row.querySelectorAll("td");
-    const name = cells[0].textContent;
-    const location = cells[1].textContent;
+    const name = cells[0].textContent as string;
+    const location = cells[1].textContent as string;
     const phoneNumbers = cells[2].textContent
       ?.split(",")
-      .map((p) => p.replace(/\s/g, ""));
+      .map((p) => p.replace(/\s/g, "")) as string[];
     const links = Array.from(cells[3].querySelectorAll("a")).map((n) => n.href);
     return {
       name,
@@ -489,25 +662,37 @@ class KelaParser {
   }
 }
 
-const entries = Object.entries(Kunta).slice(0, 10);
+const entries = Object.entries(Kunta).slice(0, 1);
 const parser = new KelaParser();
 
 async function iterate() {
   for (const [key, value] of entries) {
     console.log(`${key}: ${value}`);
-    const therapists = await parser.getTherapistsWithParams(
+    const therapistsHtml = await parser.getTherapistsWithParams(
       Lakiperuste.KUNTOUTUSPSYKOTERAPIA,
       value,
-      Toimenpide.AIKUISTEN,
+      Kuntoutusmuoto.AIKUISTEN,
       Kieli.SUOMI
     );
-    await writeFile(`./${key}_${value}.html`, therapists);
+    const therapists = parser.parseTable(therapistsHtml);
+    for (let i = 0; i < 10; i++) {
+      const data = await parser.getTherapistInfo(i);
+      const therapist = parser.parseTherapist(data);
+      await writeFile(
+        `./out/${therapists[i].name}.json`,
+        JSON.stringify(therapist, null, 2)
+      );
+    }
+    await writeFile(
+      `./out/${key}_${value}.json`,
+      JSON.stringify(therapists, null, 2)
+    );
   }
 }
 
-readFile("./AKAA_020.html", "utf-8").then((html) => {
-  const therapists = parser.parseTable(html);
-  console.log(therapists);
-});
+// readFile("./AKAA_020.html", "utf-8").then((html) => {
+//   const therapists = parser.parseTable(html);
+//   console.log(therapists);
+// });
 
-// iterate();
+iterate();
