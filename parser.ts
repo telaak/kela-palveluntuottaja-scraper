@@ -224,7 +224,7 @@ class KelaParser {
         phoneNumberTitleNode.parentElement?.nextElementSibling?.textContent?.trim() as string;
       const phoneNumbers = phoneNumberString
         .split(",")
-        .map((n) => n.replace(/[^0-9+]/g, ""));
+        .map((n) => n.replace(/[^0-9+]/g, "").trim());
       phoneNumbers.forEach((n) => this.phoneNumberSet.add(n));
       return phoneNumbers;
     }
@@ -344,13 +344,6 @@ async function getTherapists(parser: KelaParser, kunta: Kunta) {
 
 async function parse(parser: KelaParser, kunta: Kunta) {
   let therapists = await getTherapists(parser, kunta);
-  try {
-    await prisma.therapistSnippet.createMany({
-      data: therapists,
-    });
-  } catch (error) {
-    console.error(error);
-  }
   for (let i = 0; i < therapists.length; i++) {
     try {
       if (i % 10 === 0 && i !== 0) {
@@ -358,7 +351,6 @@ async function parse(parser: KelaParser, kunta: Kunta) {
       }
       const data = await parser.getTherapistInfo(i);
       const therapist = parser.parseTherapist(data);
-      console.log(therapist);
       const newTherapist = {
         name: therapist.name,
         email: therapist.email,
@@ -418,6 +410,7 @@ async function parse(parser: KelaParser, kunta: Kunta) {
       await prisma.therapist.create({
         data: newTherapist,
       });
+      console.log(therapist);
     } catch (error) {
       console.error(error);
     }
@@ -425,7 +418,7 @@ async function parse(parser: KelaParser, kunta: Kunta) {
 }
 
 async function iterate() {
-  for (const [key, value] of entries.slice(12, 16)) {
+  for (const [key, value] of entries.slice(45)) {
     const parser = new KelaParser();
     console.log(`${key}: ${value}`);
     parse(parser, value);

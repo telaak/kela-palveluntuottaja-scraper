@@ -12,6 +12,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.13",
     "@types/jsdom": "^21.1.1",
-    "prisma": "^4.15.0"
+    "prisma": "^4.15.0",
+    "typescript": "^5.1.3"
   }
 }
