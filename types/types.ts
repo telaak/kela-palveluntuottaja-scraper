@@ -17,7 +17,7 @@ export type Therapist = {
   locations: string[];
   phoneNumbers: string[];
   email: string | null;
-  homepage?: string;
+  homepage: string | null;
   languages: string[];
   orientations: Suuntaus[];
   therapyTypes: Kuntoutus[];

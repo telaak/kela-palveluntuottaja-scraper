@@ -10,21 +10,34 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model TherapistSnippet {
+  id           Int      @id @default(autoincrement())
+  name         String
+  location     String
+  phoneNumbers String[]
+  links        String[]
+  @@unique([name,location])
+}
+
 model Therapist {
   id           Int           @id @default(autoincrement())
   name         String
+  locations    Location[]
   phoneNumbers Phone[]
-  email        String?       @unique
+  email        String?
   homepage     String?
   languages    Language[]
   orientations Orientation[]
   therapies    Therapy[]
   dateAdded    DateTime      @default(now())
+
+  @@unique([name, email, homepage])
 }
 
 model Location {
-  id   Int    @id @default(autoincrement())
-  name String @unique
+  id         Int         @id @default(autoincrement())
+  name       String      @unique
+  Therapists Therapist[]
 }
 
 model Phone {
@@ -37,17 +50,15 @@ model Phone {
 }
 
 model Language {
-  id          Int         @id @default(autoincrement())
-  fiFI        String      @unique
-  Therapists  Therapist[]
-  therapistId Int?
+  id         Int         @id @default(autoincrement())
+  fiFI       String      @unique
+  Therapists Therapist[]
 }
 
 model Orientation {
-  id          Int         @id @default(autoincrement())
-  fiFI        String      @unique
-  Therapists  Therapist[]
-  therapistId Int?
+  id         Int         @id @default(autoincrement())
+  fiFI       String      @unique
+  Therapists Therapist[]
 }
 
 model Therapy {

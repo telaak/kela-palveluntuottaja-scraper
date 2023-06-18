@@ -21,6 +21,9 @@ const url = "https://asiointi.kela.fi/palvelutuottajarekisteri/alku/haku.faces";
 const allUrl =
   "https://asiointi.kela.fi/palvelutuottajarekisteri/ePTK/hakutulos.faces";
 
+const returnUrl =
+  "https://asiointi.kela.fi/palvelutuottajarekisteri/ePTK/palveluntuottajanTiedot.faces";
+
 class KelaParser {
   public currentViewState!: string;
   private jar = new CookieJar();
@@ -69,7 +72,7 @@ class KelaParser {
         "form1:radioLakiperuste": lakiperuste,
         "form1:inputTextNimihaku": "",
         "form1:selectOneMenuKunta": kunta,
-        "form1:selectOneMenuKuntoutusmuoto": Kuntoutusmuoto,
+        // "form1:selectOneMenuKuntoutusmuoto": Kuntoutusmuoto,
         "form1:button2": "Submit",
         "form1:selectOneMenuKommunikaatio": kieli,
         form1_SUBMIT: "1",
@@ -91,7 +94,7 @@ class KelaParser {
         "form1:radioLakiperuste": lakiperuste,
         "form1:inputTextNimihaku": "",
         "form1:selectOneMenuKunta": kunta,
-        "form1:selectOneMenuKuntoutusmuoto": Kuntoutusmuoto,
+        //  "form1:selectOneMenuKuntoutusmuoto": Kuntoutusmuoto,
         "form1:selectoneMenuTarkentava1": "",
         "form1:selectoneMenuTarkentava2": "Kaikki",
         "form1:selectOneMenuKommunikaatio": kieli,
@@ -113,10 +116,20 @@ class KelaParser {
       })
     );
     this.getViewStateFromHTML(response.data);
-    return response.data;
+    const sortedResponse = await this.client.post(
+      allUrl,
+      querystring.stringify({
+        hakutulos_form1_SUBMIT: "1",
+        "javax.faces.ViewState": this.currentViewState,
+        "hakutulos_form1:_idcl":
+          "hakutulos_form1:tableExPalveluntuottajat:j_id_jsp_932386772_22",
+      })
+    );
+    this.getViewStateFromHTML(sortedResponse.data);
+    return sortedResponse.data;
   }
 
-  async getTherapistInfo(tableIndex: number) {
+  async getTherapistInfo(tableIndex: number, setViewState = false) {
     const response = await this.client.post(
       allUrl,
       querystring.stringify({
@@ -125,11 +138,24 @@ class KelaParser {
         "hakutulos_form1:_idcl": `hakutulos_form1:tableExPalveluntuottajat:${tableIndex}:palveluntuottajaCommandLink`,
       })
     );
-    // this.getViewStateFromHTML(response.data);
+    if (setViewState) {
+      this.getViewStateFromHTML(response.data);
+      await this.navigateBack();
+    }
     return response.data;
   }
 
-  async navigateBack() {}
+  async navigateBack() {
+    const response = await this.client.post(
+      returnUrl,
+      querystring.stringify({
+        hakutulos_form1_SUBMIT: "1",
+        "javax.faces.ViewState": this.currentViewState,
+        "form1:PalaaHakutulokseenButton: ": "Palaa hakutulokseen",
+      })
+    );
+    this.getViewStateFromHTML(response.data);
+  }
 
   async getTherapistsWithParams(
     lakiperuste: Lakiperuste,
@@ -193,12 +219,26 @@ class KelaParser {
     const phoneNumberTitleNode = document.getElementById(
       "form1:PuhelinText"
     ) as HTMLElement;
-    const phoneNumberString =
-      phoneNumberTitleNode.parentElement?.nextElementSibling?.textContent?.trim() as string;
-    const phoneNumbers = phoneNumberString
-      .split(",")
-      .map((n) => n.replace(/[^0-9+]/g, ""));
-    return phoneNumbers;
+    if (phoneNumberTitleNode) {
+      const phoneNumberString =
+        phoneNumberTitleNode.parentElement?.nextElementSibling?.textContent?.trim() as string;
+      const phoneNumbers = phoneNumberString
+        .split(",")
+        .map((n) => n.replace(/[^0-9+]/g, ""));
+      phoneNumbers.forEach((n) => this.phoneNumberSet.add(n));
+      return phoneNumbers;
+    }
+    return [];
+  }
+
+  parseHomePage(document: Document) {
+    const homePageTitleNode = document.getElementById("form1:WwwText");
+    if (homePageTitleNode) {
+      const homepage =
+        homePageTitleNode.parentElement?.nextElementSibling?.textContent?.trim() as string;
+      return homepage;
+    }
+    return null;
   }
 
   parseEmailAddress(document: Document) {
@@ -265,6 +305,7 @@ class KelaParser {
       locations: this.parseLocations(document),
       phoneNumbers: this.parsePhoneNumbers(document),
       email: this.parseEmailAddress(document),
+      homepage: this.parseHomePage(document),
       languages: this.parseLanguages(document),
       orientations: this.parseOrientations(document),
       therapyTypes: this.parseTherapyTypes(document),
@@ -288,63 +329,106 @@ class KelaParser {
   }
 }
 
-const entries = Object.entries(Kunta).slice(0, 1);
-const parser = new KelaParser();
+const entries = Object.entries(Kunta);
+
+async function getTherapists(parser: KelaParser, kunta: Kunta) {
+  const therapistsHtml = await parser.getTherapistsWithParams(
+    Lakiperuste.KUNTOUTUSPSYKOTERAPIA,
+    kunta,
+    Kuntoutusmuoto.AIKUISTEN,
+    Kieli.SUOMI
+  );
+  const therapists = parser.parseTable(therapistsHtml);
+  return therapists;
+}
+
+async function parse(parser: KelaParser, kunta: Kunta) {
+  let therapists = await getTherapists(parser, kunta);
+  try {
+    await prisma.therapistSnippet.createMany({
+      data: therapists,
+    });
+  } catch (error) {
+    console.error(error);
+  }
+  for (let i = 0; i < therapists.length; i++) {
+    try {
+      if (i % 10 === 0 && i !== 0) {
+        therapists = await getTherapists(parser, kunta);
+      }
+      const data = await parser.getTherapistInfo(i);
+      const therapist = parser.parseTherapist(data);
+      console.log(therapist);
+      const newTherapist = {
+        name: therapist.name,
+        email: therapist.email,
+        homepage: therapist.homepage,
+        locations: {
+          connectOrCreate: therapist.locations.map((location) => {
+            return {
+              where: {
+                name: location,
+              },
+              create: {
+                name: location,
+              },
+            };
+          }),
+        },
+        phoneNumbers: {
+          create: therapist.phoneNumbers.map((number) => {
+            return {
+              number: number,
+            };
+          }),
+        },
+        languages: {
+          connectOrCreate: therapist.languages.map((language) => {
+            return {
+              where: {
+                fiFI: language,
+              },
+              create: {
+                fiFI: language,
+              },
+            };
+          }),
+        },
+        orientations: {
+          connectOrCreate: therapist.orientations.map((orientation) => {
+            return {
+              where: {
+                fiFI: orientation,
+              },
+              create: {
+                fiFI: orientation,
+              },
+            };
+          }),
+        },
+        therapies: {
+          create: therapist.therapyTypes.map((kuntoutus) => {
+            return {
+              muoto: kuntoutus.muoto,
+              lajit: kuntoutus.lajit,
+            };
+          }),
+        },
+      };
+      await prisma.therapist.create({
+        data: newTherapist,
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }
+}
 
 async function iterate() {
-  for (const [key, value] of entries) {
+  for (const [key, value] of entries.slice(12, 16)) {
+    const parser = new KelaParser();
     console.log(`${key}: ${value}`);
-    const therapistsHtml = await parser.getTherapistsWithParams(
-      Lakiperuste.KUNTOUTUSPSYKOTERAPIA,
-      value,
-      Kuntoutusmuoto.AIKUISTEN,
-      Kieli.SUOMI
-    );
-    const therapists = parser.parseTable(therapistsHtml);
-    for (let i = 0; i < 10; i++) {
-      try {
-        const data = await parser.getTherapistInfo(i);
-        const therapist = parser.parseTherapist(data);
-        await prisma.therapist.create({
-          data: {
-            name: therapist.name,
-            email: therapist.email,
-            homepage: therapist.homepage,
-            phoneNumbers: {
-              create: therapist.phoneNumbers.map((number) => {
-                return {
-                  number: number,
-                };
-              }),
-            },
-            languages: {
-              connect: therapist.languages.map((language) => {
-                return {
-                  fiFI: language,
-                };
-              }),
-            },
-            orientations: {
-              connect: therapist.orientations.map((orientation) => {
-                return {
-                  fiFI: orientation,
-                };
-              }),
-            },
-            therapies: {
-              create: therapist.therapyTypes.map((kuntoutus) => {
-                return {
-                  muoto: kuntoutus.muoto,
-                  lajit: kuntoutus.lajit,
-                };
-              }),
-            },
-          },
-        });
-      } catch (error) {
-        console.error(error)
-      }
-    }
+    parse(parser, value);
   }
 }
 
