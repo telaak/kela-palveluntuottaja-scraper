@@ -65,9 +65,10 @@ ws.addEventListener("message", async (event) => {
           },
           data: {
             isActive: true,
+            lastActive: new Date(),
           },
         });
-        revalidateNext()
+        revalidateNext();
         break;
       }
       case "Ei": {
@@ -79,7 +80,7 @@ ws.addEventListener("message", async (event) => {
             isActive: false,
           },
         });
-        revalidateNext()
+        revalidateNext();
         break;
       }
     }
