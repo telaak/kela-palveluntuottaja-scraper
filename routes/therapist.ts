@@ -11,6 +11,7 @@ therapistRouter.get("/therapist", async (req, res) => {
         languages: true,
         orientations: true,
         therapies: true,
+        locations: true
       },
     });
     res.json(therapists);

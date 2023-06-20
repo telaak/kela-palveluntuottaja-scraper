@@ -268,10 +268,13 @@ class KelaParser {
     const orientationNodes = orientationTable?.querySelectorAll(
       ".palveluntuottajanTiedotOikeaSarake"
     ) as NodeListOf<HTMLTableCellElement>;
-    const orientations = Array.from(orientationNodes).map((n) =>
-      n.textContent?.trim()
-    ) as Suuntaus[];
-    return orientations;
+    if (orientationNodes) {
+      const orientations = Array.from(orientationNodes).map((n) =>
+        n.textContent?.trim()
+      ) as Suuntaus[];
+      return orientations;
+    }
+    return [];
   }
 
   parseTherapyTypes(document: Document): Kuntoutus[] {
@@ -344,9 +347,17 @@ async function getTherapists(parser: KelaParser, kunta: Kunta) {
 
 async function parse(parser: KelaParser, kunta: Kunta) {
   let therapists = await getTherapists(parser, kunta);
+  let counter = 0;
   for (let i = 0; i < therapists.length; i++) {
     try {
-      if (i % 10 === 0 && i !== 0) {
+      const nameCheck = await prisma.therapist.findUnique({
+        where: {
+          name: therapists[i].name,
+        },
+      });
+      if (nameCheck) continue;
+
+      if (counter % 10 === 0 && counter !== 0) {
         therapists = await getTherapists(parser, kunta);
       }
       const data = await parser.getTherapistInfo(i);
@@ -410,18 +421,20 @@ async function parse(parser: KelaParser, kunta: Kunta) {
       await prisma.therapist.create({
         data: newTherapist,
       });
+      counter++;
       console.log(therapist);
     } catch (error) {
+      counter++;
       console.error(error);
     }
   }
 }
 
 async function iterate() {
-  for (const [key, value] of entries.slice(45)) {
+  for (const [key, value] of entries) {
     const parser = new KelaParser();
     console.log(`${key}: ${value}`);
-    parse(parser, value);
+    await parse(parser, value);
   }
 }
 

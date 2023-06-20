@@ -16,12 +16,13 @@ model TherapistSnippet {
   location     String
   phoneNumbers String[]
   links        String[]
-  @@unique([name,location])
+
+  @@unique([name, location])
 }
 
 model Therapist {
   id           Int           @id @default(autoincrement())
-  name         String
+  name         String        @unique
   locations    Location[]
   phoneNumbers Phone[]
   email        String?
@@ -30,8 +31,8 @@ model Therapist {
   orientations Orientation[]
   therapies    Therapy[]
   dateAdded    DateTime      @default(now())
-
-  @@unique([name, email, homepage])
+  lastActive   DateTime?
+  isActive     Boolean       @default(false)
 }
 
 model Location {
@@ -42,9 +43,7 @@ model Location {
 
 model Phone {
   id          Int        @id @default(autoincrement())
-  number      String     @unique
-  lastActive  DateTime?
-  isActive    Boolean    @default(false)
+  number      String
   Therapist   Therapist? @relation(fields: [therapistId], references: [id], onDelete: Cascade)
   therapistId Int?
 }
