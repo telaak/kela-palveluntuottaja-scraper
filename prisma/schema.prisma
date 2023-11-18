@@ -21,52 +21,59 @@ model TherapistSnippet {
 }
 
 model Therapist {
-  id           Int           @id @default(autoincrement())
-  name         String        @unique
-  locations    Location[]
-  phoneNumbers Phone[]
+  id           Int       @id @default(autoincrement())
+  name         String    @unique
+  // locations    Location[]
+  locations    String[]
+  // phoneNumbers Phone[]
+  phoneNumbers String[]
+  // languages    Language[]
+  languages    String[]
+  // orientations Orientation[]
+  orientations String[]
+  // therapies    Therapy[]
+  therapist    String[]
   email        String?
   homepage     String?
-  languages    Language[]
-  orientations Orientation[]
-  therapies    Therapy[]
-  dateAdded    DateTime      @default(now())
+  dateAdded    DateTime  @default(now())
   lastActive   DateTime?
-  isActive     Boolean       @default(false)
+  isActive     Boolean   @default(false)
+
+  @@index([name])
 }
 
-model Location {
-  id         Int         @id @default(autoincrement())
-  name       String      @unique
-  Therapists Therapist[]
-}
+// model Location {
+//   id         Int         @id @default(autoincrement())
+//   name       String      @unique
+//   Therapists Therapist[]
+// }
 
-model Phone {
-  id          Int        @id @default(autoincrement())
-  number      String
-  Therapist   Therapist? @relation(fields: [therapistId], references: [id], onDelete: Cascade)
-  therapistId Int?
-}
+// model Phone {
+//   id          Int        @id @default(autoincrement())
+//   number      String
+//   Therapist   Therapist? @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+//   therapistId Int?
+// }
 
-model Language {
-  id         Int         @id @default(autoincrement())
-  fiFI       String      @unique
-  Therapists Therapist[]
-}
+// model Language {
+//   id         Int         @id @default(autoincrement())
+//   fiFI       String      @unique
+//   Therapists Therapist[]
+// }
 
-model Orientation {
-  id         Int         @id @default(autoincrement())
-  fiFI       String      @unique
-  Therapists Therapist[]
-}
+// model Orientation {
+//   id         Int         @id @default(autoincrement())
+//   fiFI       String      @unique
+//   Therapists Therapist[]
+// }
 
-model Therapy {
-  id          Int        @id @default(autoincrement())
-  muoto       String
-  lajit       String[]
-  Therapist   Therapist? @relation(fields: [therapistId], references: [id], onDelete: Cascade)
-  therapistId Int?
-}
+// model Therapy {
+//   id          Int        @id @default(autoincrement())
+//   muoto       String
+//   lajit       String[]
+//   Therapist   Therapist? @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+//   therapistId Int?
+// }
 
 enum Suuntaus {
   PSYKOANALYYTTINEN

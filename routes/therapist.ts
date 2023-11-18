@@ -6,15 +6,16 @@ const prisma = new PrismaClient();
 
 therapistRouter.get("/therapist", async (req, res) => {
   try {
-    const therapists = await prisma.therapist.findMany({
-      include: {
-        languages: true,
-        orientations: true,
-        therapies: true,
-        locations: true,
-        phoneNumbers: true,
-      },
-    });
+    // const therapists = await prisma.therapist.findMany({
+    //   include: {
+    //     languages: true,
+    //     orientations: true,
+    //     therapies: true,
+    //     locations: true,
+    //     phoneNumbers: true,
+    //   },
+    // });
+    const therapists = await prisma.therapist.findMany()
     res.json(therapists);
   } catch (error) {
     console.error(error);
