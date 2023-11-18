@@ -311,7 +311,7 @@ export class KelaParser {
       homepage: this.parseHomePage(document),
       languages: this.parseLanguages(document),
       orientations: this.parseOrientations(document),
-      therapyTypes: this.parseTherapyTypes(document),
+      therapies: this.parseTherapyTypes(document),
     };
   }
 

@@ -20,5 +20,5 @@ export type Therapist = {
   homepage: string | null;
   languages: string[];
   orientations: Suuntaus[];
-  therapyTypes: Kuntoutus[];
+  therapies: Kuntoutus[];
 };
