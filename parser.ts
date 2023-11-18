@@ -2,9 +2,7 @@ import axios from "axios";
 import { JSDOM } from "jsdom";
 import { wrapper } from "axios-cookiejar-support";
 import { CookieJar } from "tough-cookie";
-import { writeFile, readFile } from "fs/promises";
 import querystring from "querystring";
-import { PrismaClient } from "@prisma/client";
 import {
   Lakiperuste,
   Kunta,
@@ -14,8 +12,7 @@ import {
   Laji,
 } from "./types/enums";
 import { Kuntoutus, TherapistSnippet, Therapist } from "./types/types";
-
-const prisma = new PrismaClient();
+import "dotenv/config";
 
 const url = "https://asiointi.kela.fi/palvelutuottajarekisteri/alku/haku.faces";
 const allUrl =
@@ -24,8 +21,8 @@ const allUrl =
 const returnUrl =
   "https://asiointi.kela.fi/palvelutuottajarekisteri/ePTK/palveluntuottajanTiedot.faces";
 
-class KelaParser {
-  private currentViewState: string = '';
+export class KelaParser {
+  private currentViewState: string = "";
   private jar = new CookieJar();
   private client = wrapper(
     axios.create({ jar: this.jar, withCredentials: true })
@@ -334,29 +331,4 @@ class KelaParser {
     };
   }
 }
-const kunnat = Object.entries(Kunta);
 
-async function iterate() {
-  for (const [nimi, numero] of kunnat) {
-    const parser = new KelaParser();
-    console.log(`${nimi}: ${numero}`);
-    const therapists = await parser.getTherapistsWithParams(
-      Lakiperuste.KUNTOUTUSPSYKOTERAPIA,
-      numero,
-      Kuntoutusmuoto.AIKUISTEN,
-      Kieli.SUOMI
-    );
-    for (let i = 0; i < therapists.length; i++) {
-      const therapist = await parser.getTherapistInfo(i, i % 20 === 0);
-      await prisma.therapist.upsert({
-        where: {
-          name: therapist.name,
-        },
-        update: therapist,
-        create: therapist,
-      });
-    }
-  }
-}
-
-iterate();
