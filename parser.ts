@@ -25,7 +25,7 @@ const returnUrl =
   "https://asiointi.kela.fi/palvelutuottajarekisteri/ePTK/palveluntuottajanTiedot.faces";
 
 class KelaParser {
-  public currentViewState!: string;
+  private currentViewState: string = '';
   private jar = new CookieJar();
   private client = wrapper(
     axios.create({ jar: this.jar, withCredentials: true })
@@ -85,7 +85,7 @@ class KelaParser {
   async getTherapists(
     lakiperuste: Lakiperuste,
     kunta: Kunta,
-    Kuntoutusmuoto: Kuntoutusmuoto,
+    kuntoutusmuoto: Kuntoutusmuoto,
     kieli: Kieli
   ) {
     const response = await this.client.post(
@@ -106,7 +106,7 @@ class KelaParser {
     this.getViewStateFromHTML(response.data);
   }
 
-  async getAllTherapists() {
+  async getAllTherapists(): Promise<string> {
     const response = await this.client.post(
       allUrl,
       querystring.stringify({
@@ -116,6 +116,11 @@ class KelaParser {
       })
     );
     this.getViewStateFromHTML(response.data);
+    const sortedTable = await this.sortTable();
+    return sortedTable;
+  }
+
+  async sortTable(): Promise<string> {
     const sortedResponse = await this.client.post(
       allUrl,
       querystring.stringify({
@@ -129,7 +134,7 @@ class KelaParser {
     return sortedResponse.data;
   }
 
-  async getTherapistInfo(tableIndex: number, setViewState = false) {
+  async getTherapistInfo(tableIndex: number, navigateBackAfter = false) {
     const response = await this.client.post(
       allUrl,
       querystring.stringify({
@@ -138,42 +143,40 @@ class KelaParser {
         "hakutulos_form1:_idcl": `hakutulos_form1:tableExPalveluntuottajat:${tableIndex}:palveluntuottajaCommandLink`,
       })
     );
-    if (setViewState) {
+    if (navigateBackAfter) {
       this.getViewStateFromHTML(response.data);
       await this.navigateBack();
     }
-    return response.data;
+    const therapist = this.parseTherapist(response.data);
+    return therapist;
   }
 
-  async navigateBack() {
+  async navigateBack(): Promise<string> {
     const response = await this.client.post(
       returnUrl,
       querystring.stringify({
-        hakutulos_form1_SUBMIT: "1",
+        form1_SUBMIT: "1",
         "javax.faces.ViewState": this.currentViewState,
-        "form1:PalaaHakutulokseenButton: ": "Palaa hakutulokseen",
+        "form1:PalaaHakutulokseenButton": "Palaa hakutulokseen",
       })
     );
     this.getViewStateFromHTML(response.data);
+    return response.data;
   }
 
   async getTherapistsWithParams(
     lakiperuste: Lakiperuste,
     kunta: Kunta,
-    Kuntoutusmuoto: Kuntoutusmuoto,
+    kuntoutusmuoto: Kuntoutusmuoto,
     kieli: Kieli
-  ): Promise<string> {
+  ): Promise<TherapistSnippet[]> {
     await this.jar.removeAllCookies();
     await this.getInitialViewState();
     await this.setLakiperuste(lakiperuste);
-    await this.initTherapists(lakiperuste, kunta, Kuntoutusmuoto, kieli);
-    await this.getTherapists(
-      Lakiperuste.KUNTOUTUSPSYKOTERAPIA,
-      kunta,
-      Kuntoutusmuoto,
-      kieli
-    );
-    const therapists = await this.getAllTherapists();
+    await this.initTherapists(lakiperuste, kunta, kuntoutusmuoto, kieli);
+    await this.getTherapists(lakiperuste, kunta, kuntoutusmuoto, kieli);
+    const therapistsHtml = await this.getAllTherapists();
+    const therapists = this.parseTable(therapistsHtml);
     return therapists;
   }
 
@@ -331,110 +334,28 @@ class KelaParser {
     };
   }
 }
-
-const entries = Object.entries(Kunta);
-
-async function getTherapists(parser: KelaParser, kunta: Kunta) {
-  const therapistsHtml = await parser.getTherapistsWithParams(
-    Lakiperuste.KUNTOUTUSPSYKOTERAPIA,
-    kunta,
-    Kuntoutusmuoto.AIKUISTEN,
-    Kieli.SUOMI
-  );
-  const therapists = parser.parseTable(therapistsHtml);
-  return therapists;
-}
-
-async function parse(parser: KelaParser, kunta: Kunta) {
-  let therapists = await getTherapists(parser, kunta);
-  let counter = 0;
-  for (let i = 0; i < therapists.length; i++) {
-    try {
-      const nameCheck = await prisma.therapist.findUnique({
-        where: {
-          name: therapists[i].name,
-        },
-      });
-      if (nameCheck) continue;
-
-      if (counter % 10 === 0 && counter !== 0) {
-        therapists = await getTherapists(parser, kunta);
-      }
-      const data = await parser.getTherapistInfo(i);
-      const therapist = parser.parseTherapist(data);
-      const newTherapist = {
-        name: therapist.name,
-        email: therapist.email,
-        homepage: therapist.homepage,
-        locations: {
-          connectOrCreate: therapist.locations.map((location) => {
-            return {
-              where: {
-                name: location,
-              },
-              create: {
-                name: location,
-              },
-            };
-          }),
-        },
-        phoneNumbers: {
-          create: therapist.phoneNumbers.map((number) => {
-            return {
-              number: number,
-            };
-          }),
-        },
-        languages: {
-          connectOrCreate: therapist.languages.map((language) => {
-            return {
-              where: {
-                fiFI: language,
-              },
-              create: {
-                fiFI: language,
-              },
-            };
-          }),
-        },
-        orientations: {
-          connectOrCreate: therapist.orientations.map((orientation) => {
-            return {
-              where: {
-                fiFI: orientation,
-              },
-              create: {
-                fiFI: orientation,
-              },
-            };
-          }),
-        },
-        therapies: {
-          create: therapist.therapyTypes.map((kuntoutus) => {
-            return {
-              muoto: kuntoutus.muoto,
-              lajit: kuntoutus.lajit,
-            };
-          }),
-        },
-      };
-      await prisma.therapist.create({
-        data: newTherapist,
-      });
-      counter++;
-      console.log(therapist);
-    } catch (error) {
-      counter++;
-      console.error(error);
-    }
-  }
-}
+const kunnat = Object.entries(Kunta);
 
 async function iterate() {
-  for (const [key, value] of entries) {
+  for (const [nimi, numero] of kunnat) {
     const parser = new KelaParser();
-    console.log(`${key}: ${value}`);
-    await parse(parser, value);
+    console.log(`${nimi}: ${numero}`);
+    const therapists = await parser.getTherapistsWithParams(
+      Lakiperuste.KUNTOUTUSPSYKOTERAPIA,
+      numero,
+      Kuntoutusmuoto.AIKUISTEN,
+      Kieli.SUOMI
+    );
+    for (let i = 0; i < therapists.length; i++) {
+      const therapist = await parser.getTherapistInfo(i, i % 20 === 0);
+      await prisma.therapist.upsert({
+        where: {
+          name: therapist.name,
+        },
+        update: therapist,
+        create: therapist,
+      });
+    }
   }
 }
 
