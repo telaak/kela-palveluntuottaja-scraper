@@ -33,6 +33,7 @@ if (process.env.CRON) {
 }
 
 async function iterate() {
+  const nameSet: Set<string> = new Set();
   for (const [kuntaName, kuntaNumber] of toBeParsed) {
     const parser = new KelaParser();
     console.log(`${kuntaName}: ${kuntaNumber}`);
@@ -43,18 +44,29 @@ async function iterate() {
       Kieli.SUOMI
     );
     for (let i = 0; i < therapists.length; i++) {
-      const therapist = await parser.getTherapistInfo(i, i % 20 === 0);
-      console.log(therapist);
+      const therapistName = therapists[i].name;
+      try {
+        if (nameSet.has(therapistName)) {
+          console.log(`duplicate: ${therapists[i].name}`);
+          continue;
+        }
 
-      if (process.env.SAVE_JSON === "true") {
-        writeFile(
-          `./out/${kuntaName}-${therapist.name}.json`,
-          JSON.stringify(therapist, null, 2)
-        ).catch(console.error);
-      }
+        const therapist = await parser.getTherapistInfo(i, i % 5 === 0);
+        nameSet.add(therapist.name);
+        console.log(therapist);
 
-      if (process.env.API_URL) {
-        axios.post(process.env.API_URL, therapist).catch(console.error);
+        if (process.env.SAVE_JSON === "true") {
+          writeFile(
+            `./out/${kuntaName}-${therapist.name}.json`,
+            JSON.stringify(therapist, null, 2)
+          ).catch(console.error);
+        }
+
+        if (process.env.API_URL) {
+          axios.post(process.env.API_URL, therapist).catch(console.error);
+        }
+      } catch (error) {
+        console.log(`error with ${therapistName}`);
       }
     }
   }
