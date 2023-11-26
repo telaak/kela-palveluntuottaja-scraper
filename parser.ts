@@ -21,14 +21,31 @@ const allUrl =
 const returnUrl =
   "https://asiointi.kela.fi/palvelutuottajarekisteri/ePTK/palveluntuottajanTiedot.faces";
 
+/**
+ * The main parser class, instances have to keep track of JavaFX's ViewState
+ * Navigating from one view to another, unfamiliar with the exact logic
+ */
+
 export class KelaParser {
+  /**
+   * The current JavaFX viewstate, needed for navigation
+   */
   private currentViewState: string = "";
+
+  /**
+   * Axios with cookie support for http requests
+   */
+
   private jar = new CookieJar();
   private client = wrapper(
     axios.create({ jar: this.jar, withCredentials: true })
   );
 
-  public phoneNumberSet: Set<string> = new Set();
+  /**
+   * Parses the JavaFX ViewState from a page's html
+   * The state is hidden in a HTML element on every page
+   * @param html The html to parse
+   */
 
   getViewStateFromHTML(html: string) {
     const { document } = new JSDOM(html).window;
@@ -38,10 +55,20 @@ export class KelaParser {
     this.currentViewState = viewState.value;
   }
 
+  /**
+   * After opening the first page, gets the ViewState from it
+   */
+
   async getInitialViewState() {
     const response = await this.client.get(url);
     this.getViewStateFromHTML(response.data);
   }
+
+  /**
+   * Sets the "lakiperuste" on the main form
+   * The form refreshes the page after it's chosen
+   * @param lakiperuste check {@link Lakiperuste}
+   */
 
   async setLakiperuste(lakiperuste: Lakiperuste) {
     const response = await this.client.post(
@@ -225,7 +252,6 @@ export class KelaParser {
       const phoneNumbers = phoneNumberString
         .split(",")
         .map((n) => n.replace(/[^0-9+]/g, "").trim());
-      phoneNumbers.forEach((n) => this.phoneNumberSet.add(n));
       return phoneNumbers;
     }
     return [];
@@ -331,4 +357,3 @@ export class KelaParser {
     };
   }
 }
-
