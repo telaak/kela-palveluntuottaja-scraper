@@ -1,0 +1,4 @@
+{
+  "entryPoints": ["index.ts", "parser.ts", "types/enums.ts", "types/types.ts"],
+  "out": "docs"
+}
