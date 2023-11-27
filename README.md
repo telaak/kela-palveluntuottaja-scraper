@@ -43,7 +43,7 @@ version: '3.8'
 services:
     
   frontend:
-    image: telaaks/kela-palceluntuottaja-scraper
+    image: telaaks/kela-palveluntuottaja-scraper
     restart: unless-stopped
     environment:
       - API_URL=http://
