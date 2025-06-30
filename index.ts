@@ -59,22 +59,24 @@ if (process.env.CRON) {
 
 async function iterate() {
   const nameSet: Set<string> = new Set();
+
   for (const [kuntaName, kuntaNumber] of toBeParsed) {
     const parser = new KelaParser();
     console.log(`${kuntaName}: ${kuntaNumber}`);
-    const therapists = await parser.getTherapistsWithParams(
-      Lakiperuste.KUNTOUTUSPSYKOTERAPIA,
-      kuntaNumber,
-      Kuntoutusmuoto.AIKUISTEN,
-      Kieli.SUOMI
-    );
-    /**
-     * Loops through the table indices
-     * Names are assumed to be unique, so to avoid duplicates they're added to a set
-     */
-    for (let i = 0; i < therapists.length; i++) {
-      const therapistName = therapists[i].name;
-      try {
+    try {
+      const therapists = await parser.getTherapistsWithParams(
+        Lakiperuste.KUNTOUTUSPSYKOTERAPIA,
+        kuntaNumber,
+        Kuntoutusmuoto.AIKUISTEN,
+        Kieli.SUOMI
+      );
+      /**
+       * Loops through the table indices
+       * Names are assumed to be unique, so to avoid duplicates they're added to a set
+       */
+      for (let i = 0; i < therapists.length; i++) {
+        const therapistName = therapists[i].name;
+
         if (nameSet.has(therapistName)) {
           console.log(`duplicate: ${therapists[i].name}`);
           continue;
@@ -86,31 +88,35 @@ async function iterate() {
          * Iterating through everything is slow but since it's done so sparingly, 5 is enough
          */
 
-        const therapist = await parser.getTherapistInfo(i, i % 5 === 0);
-        nameSet.add(therapist.name);
-        console.log(therapist);
+        try {
+          const therapist = await parser.getTherapistInfo(i, i % 5 === 0);
+          nameSet.add(therapist.name);
+          console.log(therapist);
 
-        /**
-         * Save the parsed therapists to "./out/" if env variable is set
-         */
+          /**
+           * Save the parsed therapists to "./out/" if env variable is set
+           */
 
-        if (process.env.SAVE_JSON === "true") {
-          writeFile(
-            `./out/${kuntaName}-${therapist.name}.json`,
-            JSON.stringify(therapist, null, 2)
-          ).catch(console.error);
+          if (process.env.SAVE_JSON === "true") {
+            writeFile(
+              `./out/${kuntaName}-${therapist.name}.json`,
+              JSON.stringify(therapist, null, 2)
+            ).catch(console.error);
+          }
+
+          /**
+           * Sends the therapist's JSON in a HTTP POST request to the URL specified in env variable
+           */
+
+          if (process.env.API_URL) {
+            axios.post(process.env.API_URL, therapist).catch(console.error);
+          }
+        } catch (error) {
+          console.error(`error with ${therapistName}`);
         }
-
-        /**
-         * Sends the therapist's JSON in a HTTP POST request to the URL specified in env variable
-         */
-
-        if (process.env.API_URL) {
-          axios.post(process.env.API_URL, therapist).catch(console.error);
-        }
-      } catch (error) {
-        console.log(`error with ${therapistName}`);
       }
+    } catch (error) {
+      console.log(`error with ${kuntaName}`);
     }
   }
 
