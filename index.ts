@@ -3,6 +3,7 @@ import { KelaParser } from "./parser";
 import { Kunta, Lakiperuste, Kuntoutusmuoto, Kieli } from "./types/enums";
 import { writeFile } from "fs/promises";
 import { CronJob } from "cron";
+import dayjs from "dayjs";
 
 /**
  * Gets either all the Kunta (Kinte) or the list from env variable
@@ -59,8 +60,13 @@ if (process.env.CRON) {
 
 async function iterate() {
   const nameSet: Set<string> = new Set();
+  const clone = Array.from(toBeParsed);
 
-  for (const [kuntaName, kuntaNumber] of toBeParsed) {
+  if (dayjs().day() % 2 === 0) {
+    clone.reverse();
+  }
+
+  for (const [kuntaName, kuntaNumber] of clone) {
     const parser = new KelaParser();
     console.log(`${kuntaName}: ${kuntaNumber}`);
     try {
